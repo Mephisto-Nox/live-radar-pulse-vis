@@ -1,4 +1,4 @@
-package com.pulsevision.api;
+package com.github.mephisto_nox.radar_pulse_vis.api;
 
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;

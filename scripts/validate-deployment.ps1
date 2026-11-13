@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
-$env:BACKEND_IMAGE = 'ghcr.io/example/backend:validation'
-$env:FRONTEND_IMAGE = 'ghcr.io/example/frontend:validation'
+$env:BACKEND_IMAGE = 'ghcr.io/mephisto-nox/radar-pulse-vis/backend:validation'
+$env:FRONTEND_IMAGE = 'ghcr.io/mephisto-nox/radar-pulse-vis/frontend:validation'
 
 $composeFiles = @(
     'deployment/docker-compose.yml',

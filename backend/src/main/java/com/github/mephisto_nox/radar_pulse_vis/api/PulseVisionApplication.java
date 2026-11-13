@@ -1,4 +1,4 @@
-package com.pulsevision.api;
+package com.github.mephisto_nox.radar_pulse_vis.api;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

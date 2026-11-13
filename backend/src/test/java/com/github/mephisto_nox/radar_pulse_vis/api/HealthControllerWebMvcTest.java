@@ -1,4 +1,4 @@
-package com.pulsevision.api;
+package com.github.mephisto_nox.radar_pulse_vis.api;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;

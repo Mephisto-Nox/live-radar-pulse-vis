@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/OWNER/REPOSITORY/frontend:REPLACE_WITH_TAG
+          image: ghcr.io/mephisto-nox/radar-pulse-vis/frontend:REPLACE_WITH_TAG
           ports:
             - name: http
               containerPort: 8080
