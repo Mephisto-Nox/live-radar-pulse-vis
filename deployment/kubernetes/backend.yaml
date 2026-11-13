@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pulse-vision-backend
+  labels:
+    app.kubernetes.io/name: pulse-vision-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pulse-vision-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pulse-vision-backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/OWNER/REPOSITORY/backend:REPLACE_WITH_TAG
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  selector:
+    app.kubernetes.io/name: pulse-vision-backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
