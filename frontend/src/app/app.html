@@ -1,0 +1,19 @@
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Hauptnavigation">
+    <a class="brand" routerLink="/dashboard" aria-label="Pulse Vision Startseite"><span class="brand-mark" aria-hidden="true">P</span><span><strong>Pulse Vision</strong><small>RADAR ANALYTICS</small></span></a>
+    <div class="nav-label">Arbeitsbereich</div>
+    <nav class="navigation">
+      <a routerLink="/start" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-icon" aria-hidden="true">⌂</span>Start</a>
+      <a routerLink="/dashboard" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-icon" aria-hidden="true">▦</span>Live-Übersicht</a>
+      <a routerLink="/detail" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-icon" aria-hidden="true">⌁</span>Detailansicht</a>
+    </nav>
+    <div class="sidebar-bottom">
+      <a routerLink="/settings" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-icon" aria-hidden="true">⚙</span>Einstellungen</a>
+      <div class="environment"><span class="status-dot"></span><span>Lokale Umgebung</span><span class="environment-tag">DEV</span></div>
+    </div>
+  </aside>
+  <main class="main-area">
+    <header class="topbar"><div class="breadcrumb"><span>Pulse Vision</span><span aria-hidden="true">/</span><strong>Arbeitsbereich</strong></div><div class="connection"><span class="status-dot muted"></span>Live-Daten deaktiviert</div></header>
+    <section class="page-content"><router-outlet /></section>
+  </main>
+</div>

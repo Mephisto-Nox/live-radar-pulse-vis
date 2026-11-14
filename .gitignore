@@ -1,0 +1,19 @@
+docs/internal/*
+
+# Java / Maven
+**/target/
+
+# Node / Angular
+**/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# Local configuration and IDE files
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
