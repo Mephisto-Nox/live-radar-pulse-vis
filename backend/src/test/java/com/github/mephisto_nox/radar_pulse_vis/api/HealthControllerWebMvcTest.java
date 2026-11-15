@@ -22,6 +22,7 @@ class HealthControllerWebMvcTest {
         mockMvc.perform(get("/api/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"))
-                .andExpect(jsonPath("$.service").value("pulse-vision-api"));
+                .andExpect(jsonPath("$.service").value("pulse-vision-api"))
+                .andExpect(jsonPath("$.packetPipeline").value("UP"));
     }
 }

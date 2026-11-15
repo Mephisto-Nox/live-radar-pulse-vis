@@ -1,0 +1,59 @@
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">ARBEITSBEREICH</p>
+    <h1>Live-Übersicht</h1>
+    <p class="subtitle">Eingehende Pakete der aktiven Datenquelle</p>
+  </div>
+  <span class="stream-badge" [class.connected]="stream.status() === 'connected'">
+    <span class="status-dot"></span>{{ stream.status() === 'connected' ? 'STREAM VERBUNDEN' : stream.status() === 'connecting' ? 'VERBINDE …' : stream.status() === 'error' ? 'VERBINDUNGSFEHLER' : 'STREAM GETRENNT' }}
+  </span>
+</div>
+
+<section class="summary-grid" aria-label="Paketflussstatus">
+  <article class="summary-card">
+    <span class="summary-label">QUELLE</span>
+    <strong>Demo-Empfänger</strong>
+    <span class="summary-detail">Austauschbare Empfangsschnittstelle</span>
+  </article>
+  <article class="summary-card">
+    <span class="summary-label">PAKETE ANGEZEIGT</span>
+    <strong>{{ stream.packets().length }}</strong>
+    <span class="summary-detail">Maximal 100 aktuelle Pakete im Browser</span>
+  </article>
+  <article class="summary-card">
+    <span class="summary-label">VERARBEITUNG</span>
+    <strong>In-Memory-Channel</strong>
+    <span class="summary-detail">Broker-Port vorbereitet, keine dauerhafte Speicherung</span>
+  </article>
+</section>
+
+<section class="packet-panel" aria-labelledby="packets-heading">
+  <div class="panel-heading">
+    <div><h2 id="packets-heading">Empfangene Pakete</h2><p>Metadaten-Durchstich · keine PDW-Auswertung</p></div>
+    <span class="live-indicator"><span></span> LIVE</span>
+  </div>
+  @if (stream.packets().length === 0) {
+    <div class="empty-state" role="status">
+      <span class="empty-icon" aria-hidden="true">⌁</span>
+      <strong>Warte auf Pakete</strong>
+      <p>Sobald die Verbindung steht, werden eingehende Paketmetadaten hier angezeigt.</p>
+    </div>
+  } @else {
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Empfänger</th><th>Sequenz</th><th>Empfangen</th><th class="numeric">Paketgröße</th></tr></thead>
+        <tbody>
+          @for (packet of stream.packets(); track packet.receiverId + '-' + packet.sequenceNumber) {
+            <tr>
+              <td><span class="receiver"><span></span>{{ packet.receiverId }}</span></td>
+              <td class="sequence">{{ packet.sequenceNumber }}</td>
+              <td>{{ packet.receivedAt | date:'HH:mm:ss.SSS' }}</td>
+              <td class="numeric">{{ packet.payloadLengthBytes }} <span class="unit">Byte</span></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>
+<footer class="page-footer"><span>Pulse Vision · Entwicklungsumgebung</span><span>Die Anzeige hält höchstens 100 Paketmetadaten im Arbeitsspeicher</span></footer>

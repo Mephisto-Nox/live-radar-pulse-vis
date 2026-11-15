@@ -37,4 +37,15 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Keine Empfänger verbunden');
   });
+
+  it('renders the live packet table and connection state on the dashboard', async () => {
+    const fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/dashboard');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Empfangene Pakete');
+    expect(compiled.textContent).toContain('Demo-Empfänger');
+    expect(compiled.textContent).toContain('Paketstream');
+  });
 });
