@@ -10,7 +10,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest
+@SpringBootTest(properties = "spring.kafka.admin.auto-create=false")
 @AutoConfigureMockMvc
 class HealthControllerWebMvcTest {
 
@@ -24,5 +24,14 @@ class HealthControllerWebMvcTest {
                 .andExpect(jsonPath("$.status").value("UP"))
                 .andExpect(jsonPath("$.service").value("pulse-vision-api"))
                 .andExpect(jsonPath("$.packetPipeline").value("UP"));
+    }
+
+    @Test
+    void pdwHealthEndpointReportsReceiverAndMetrics() throws Exception {
+        mockMvc.perform(get("/api/pdw/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.udpReceiver").value("UP"))
+                .andExpect(jsonPath("$.kafkaPublisherWorker").value("UP"))
+                .andExpect(jsonPath("$.metrics.receivedDatagrams").value(0));
     }
 }
