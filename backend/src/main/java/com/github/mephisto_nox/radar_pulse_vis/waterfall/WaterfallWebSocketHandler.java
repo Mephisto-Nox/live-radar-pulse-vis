@@ -22,7 +22,7 @@ import tools.jackson.databind.ObjectMapper;
 public class WaterfallWebSocketHandler extends AbstractWebSocketHandler {
     private static final Logger logger = LoggerFactory.getLogger(WaterfallWebSocketHandler.class);
     private static final int SEND_TIME_LIMIT_MILLIS = 500;
-    private static final int BUFFER_SIZE_LIMIT_BYTES = 96 * 1024;
+    private static final int BUFFER_SIZE_LIMIT_BYTES = 256 * 1024;
     private static final int DEFAULT_WINDOW_SECONDS = 10;
     private static final int MIN_WINDOW_SECONDS = 5;
     private static final int MAX_WINDOW_SECONDS = 30;
@@ -69,9 +69,22 @@ public class WaterfallWebSocketHandler extends AbstractWebSocketHandler {
             int windowSeconds = command.timeWindowSeconds() == null
                     ? DEFAULT_WINDOW_SECONDS
                     : Math.clamp(command.timeWindowSeconds(), MIN_WINDOW_SECONDS, MAX_WINDOW_SECONDS);
+            double frequencyFromGHz = command.frequencyFromGHz() == null || !Double.isFinite(command.frequencyFromGHz())
+                    ? 0.0
+                    : Math.clamp(command.frequencyFromGHz(), 0.0, 60.0);
+            double frequencyToGHz = command.frequencyToGHz() == null || !Double.isFinite(command.frequencyToGHz())
+                    ? 60.0
+                    : Math.clamp(command.frequencyToGHz(), 0.0, 60.0);
+            if (frequencyToGHz <= frequencyFromGHz) {
+                frequencyFromGHz = 0.0;
+                frequencyToGHz = 60.0;
+            }
             synchronized (state) {
                 state.receiverId = receiverId;
                 state.timeWindowSeconds = windowSeconds;
+                state.frequencyFromKHz = Math.round(frequencyFromGHz * 1_000_000.0);
+                state.frequencyToKHz = Math.round(frequencyToGHz * 1_000_000.0);
+                state.zoomed = frequencyFromGHz > 0.0 || frequencyToGHz < 60.0;
                 state.sentRevisions.clear();
             }
             sendReceiverStatus(state.session);
@@ -115,7 +128,8 @@ public class WaterfallWebSocketHandler extends AbstractWebSocketHandler {
             long earliestVisible = nowMillis - state.timeWindowSeconds * 1_000L;
             for (WaterfallRow row : aggregator.changedRowsSince(state.receiverId, earliestVisible, state.sentRevisions)) {
                 try {
-                    state.session.sendMessage(new BinaryMessage(encoder.encode(state.receiverId, row)));
+                state.session.sendMessage(new BinaryMessage(encoder.encode(
+                        state.receiverId, row, state.frequencyFromKHz, state.frequencyToKHz, state.zoomed)));
                 } catch (IOException | RuntimeException exception) {
                     sessions.remove(sessionId, state);
                     closeSession(state.session);
@@ -146,12 +160,20 @@ public class WaterfallWebSocketHandler extends AbstractWebSocketHandler {
         }
     }
 
-    private record ClientCommand(String type, String receiverId, Integer timeWindowSeconds) {}
+    private record ClientCommand(
+            String type,
+            String receiverId,
+            Integer timeWindowSeconds,
+            Double frequencyFromGHz,
+            Double frequencyToGHz) {}
 
     private static final class ClientState {
         private final WebSocketSession session;
         private String receiverId;
         private int timeWindowSeconds = DEFAULT_WINDOW_SECONDS;
+        private long frequencyFromKHz = WaterfallAggregator.MIN_FREQUENCY_KHZ;
+        private long frequencyToKHz = WaterfallAggregator.MAX_FREQUENCY_KHZ;
+        private boolean zoomed;
         private final Map<Long, Long> sentRevisions = new HashMap<>();
 
         private ClientState(WebSocketSession session) {

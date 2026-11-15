@@ -52,6 +52,7 @@ const translations = {
     frequencyEnd: 'Bis (GHz)',
     thresholdDbm: 'dBm',
     selectedBand: 'Markierten Bereich übernehmen',
+    resetZoom: 'Zoom zurücksetzen',
   },
   en: {
     start: 'Start',
@@ -102,6 +103,7 @@ const translations = {
     frequencyEnd: 'To (GHz)',
     thresholdDbm: 'dBm',
     selectedBand: 'Use selected range',
+    resetZoom: 'Reset zoom',
   },
 } as const;
 

@@ -71,3 +71,4 @@ h2 { margin: 0; color: #28374a; font-size: 13px; font-weight: 700; }
 @media (max-width: 1100px) { .display-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px) { :host { min-width: 0; } .screen-heading { align-items: flex-start; flex-direction: column; } .control-panel { align-items: stretch; } .control-group { flex: 1 1 42%; } .amplitude-control { flex-basis: 100%; } .pause-button { flex: 1 1 100%; } .panel-metrics { gap: 10px; } .plot-footer { align-items: flex-start; flex-direction: column; } .cursor-readout { text-align: left; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+.zoom-selection { position: absolute; inset-block: 0; z-index: 2; border: 1px solid #68e0ca; background: rgba(59, 194, 172, .18); box-shadow: 0 0 0 1px rgba(8, 27, 38, .6); pointer-events: none; }

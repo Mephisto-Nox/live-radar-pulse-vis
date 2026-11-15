@@ -27,6 +27,8 @@ export class WaterfallStreamService {
   readonly receivers = signal<string[]>(['RX-01']);
   readonly selectedReceiver = signal('RX-01');
   readonly timeWindowSeconds = signal(10);
+  readonly frequencyFromGHz = signal(0);
+  readonly frequencyToGHz = signal(60);
   readonly udpStatus = signal<'UP' | 'DOWN' | 'UNKNOWN'>('UNKNOWN');
   readonly kafkaStatus = signal<'UP' | 'DOWN' | 'UNKNOWN'>('UNKNOWN');
 
@@ -94,6 +96,12 @@ export class WaterfallStreamService {
     this.sendConfiguration();
   }
 
+  configureFrequencyRange(fromGHz: number, toGHz: number): void {
+    this.frequencyFromGHz.set(fromGHz);
+    this.frequencyToGHz.set(toGHz);
+    this.sendConfiguration();
+  }
+
   clearRows(): void {
     this.rows.set([]);
   }
@@ -104,6 +112,8 @@ export class WaterfallStreamService {
       type: 'configure',
       receiverId: this.selectedReceiver(),
       timeWindowSeconds: this.timeWindowSeconds(),
+      frequencyFromGHz: this.frequencyFromGHz(),
+      frequencyToGHz: this.frequencyToGHz(),
     }));
   }
 

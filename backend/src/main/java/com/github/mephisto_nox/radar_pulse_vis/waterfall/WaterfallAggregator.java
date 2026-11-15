@@ -16,12 +16,13 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class WaterfallAggregator {
-    public static final int FREQUENCY_BIN_COUNT = 200;
+    public static final int FREQUENCY_BIN_COUNT = 600;
+    public static final int ZOOM_FREQUENCY_BIN_COUNT = 2_000;
     public static final int AMPLITUDE_BIN_COUNT = 41;
     public static final int ROW_DURATION_MILLIS = 100;
     public static final int HISTORY_SECONDS = 30;
-    public static final long MIN_FREQUENCY_KHZ = 8_000_000L;
-    public static final long MAX_FREQUENCY_KHZ = 12_000_000L;
+    public static final long MIN_FREQUENCY_KHZ = 0L;
+    public static final long MAX_FREQUENCY_KHZ = 60_000_000L;
     public static final int MIN_POWER_TENTH_DBM = -800;
     public static final int MAX_POWER_TENTH_DBM = -400;
 
@@ -107,6 +108,7 @@ public class WaterfallAggregator {
                         .computeIfAbsent(receiver.getKey(), ignored -> new TreeMap<>())
                         .remove(next);
                 MutableRow row = pending == null ? new MutableRow(next) : pending;
+                row.trimZoomSamples();
                 receiver.getValue().addLast(row);
                 while (receiver.getValue().size() > HISTORY_ROWS) {
                     receiver.getValue().removeFirst();
@@ -186,6 +188,9 @@ public class WaterfallAggregator {
                 AMPLITUDE_BIN_COUNT - 1,
                 (pdw.powerTenthDbm() - MIN_POWER_TENTH_DBM) / 10);
         row.increment(amplitudeBin * FREQUENCY_BIN_COUNT + frequencyBin);
+        int zoomFrequencyBin = (int) ((frequency - MIN_FREQUENCY_KHZ) * ZOOM_FREQUENCY_BIN_COUNT
+                / (MAX_FREQUENCY_KHZ - MIN_FREQUENCY_KHZ));
+        row.appendZoomSample(zoomFrequencyBin * AMPLITUDE_BIN_COUNT + amplitudeBin);
         return true;
     }
 
@@ -196,6 +201,8 @@ public class WaterfallAggregator {
     private static final class MutableRow {
         private final long startTimeMillis;
         private final short[] counts = new short[COUNTS_PER_ROW];
+        private int[] zoomSamples = new int[64];
+        private int zoomSampleCount;
         private int inputPulseCount;
         private boolean gap;
         private long revision;
@@ -223,8 +230,22 @@ public class WaterfallAggregator {
             revision++;
         }
 
+        private void appendZoomSample(int packedSample) {
+            if (zoomSampleCount == zoomSamples.length) {
+                zoomSamples = java.util.Arrays.copyOf(zoomSamples, Math.max(64, zoomSamples.length * 2));
+            }
+            zoomSamples[zoomSampleCount++] = packedSample;
+        }
+
+        private void trimZoomSamples() {
+            if (zoomSamples.length != zoomSampleCount) {
+                zoomSamples = java.util.Arrays.copyOf(zoomSamples, zoomSampleCount);
+            }
+        }
+
         private WaterfallRow toSnapshot() {
-            return new WaterfallRow(startTimeMillis, inputPulseCount, gap, revision, counts.clone());
+            return new WaterfallRow(startTimeMillis, inputPulseCount, gap, revision, counts.clone(),
+                    java.util.Arrays.copyOf(zoomSamples, zoomSampleCount));
         }
 
         private int saturatingAdd(int left, int right) {

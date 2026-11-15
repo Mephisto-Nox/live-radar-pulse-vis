@@ -18,16 +18,19 @@ class WaterfallAggregatorTest {
         long rowStart = 1_000_000L;
         aggregator.accept(batch("RX-01", rowStart + 20,
                 new Pdw(10, 8_000_000, 10, -650, 100),
-                new Pdw(20, 8_020_000, 10, -641, 200),
+                new Pdw(20, 8_120_000, 10, -641, 200),
                 new Pdw(30, 9_000_000, 10, -400, 300)));
 
         aggregator.advanceTo(rowStart + WaterfallAggregator.ROW_DURATION_MILLIS * 2L);
 
         WaterfallRow row = rowsSince("RX-01", rowStart).getFirst();
         assertThat(row.gap()).isFalse();
-        int lowAmplitudeBin = 15 * WaterfallAggregator.FREQUENCY_BIN_COUNT;
-        int nextAmplitudeBin = 15 * WaterfallAggregator.FREQUENCY_BIN_COUNT + 1;
-        int highAmplitudeBin = 40 * WaterfallAggregator.FREQUENCY_BIN_COUNT + 50;
+        int lowFrequencyBin = frequencyBin(8_000_000);
+        int nextFrequencyBin = frequencyBin(8_120_000);
+        int highFrequencyBin = frequencyBin(9_000_000);
+        int lowAmplitudeBin = 15 * WaterfallAggregator.FREQUENCY_BIN_COUNT + lowFrequencyBin;
+        int nextAmplitudeBin = 15 * WaterfallAggregator.FREQUENCY_BIN_COUNT + nextFrequencyBin;
+        int highAmplitudeBin = 40 * WaterfallAggregator.FREQUENCY_BIN_COUNT + highFrequencyBin;
         assertThat(row.inputPulseCount()).isEqualTo(3);
         assertThat(Short.toUnsignedInt(row.countsByAmplitudeAndFrequency()[lowAmplitudeBin])).isEqualTo(1);
         assertThat(Short.toUnsignedInt(row.countsByAmplitudeAndFrequency()[nextAmplitudeBin])).isEqualTo(1);
@@ -52,7 +55,7 @@ class WaterfallAggregatorTest {
     void ignoresPulsesOutsideConfiguredFrequencyOrAmplitudeGrid() {
         long rowStart = 1_000_000L;
         aggregator.accept(batch("RX-01", rowStart + 20,
-                new Pdw(10, 7_999_999, 10, -650, 100),
+                new Pdw(10, 60_000_000, 10, -650, 100),
                 new Pdw(20, 8_000_000, 10, -801, 100)));
 
         aggregator.advanceTo(rowStart + WaterfallAggregator.ROW_DURATION_MILLIS * 2L);
@@ -124,5 +127,11 @@ class WaterfallAggregatorTest {
 
     private List<WaterfallRow> rowsSince(String receiverId, long fromMillis) {
         return aggregator.changedRowsSince(receiverId, fromMillis, new HashMap<>());
+    }
+
+    private int frequencyBin(long frequencyKHz) {
+        return (int) ((frequencyKHz - WaterfallAggregator.MIN_FREQUENCY_KHZ)
+                * WaterfallAggregator.FREQUENCY_BIN_COUNT
+                / (WaterfallAggregator.MAX_FREQUENCY_KHZ - WaterfallAggregator.MIN_FREQUENCY_KHZ));
     }
 }

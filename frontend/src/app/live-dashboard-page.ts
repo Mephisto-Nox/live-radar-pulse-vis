@@ -6,6 +6,9 @@ import { WaterfallRow, WaterfallStreamService } from './waterfall-stream.service
 
 const AMPLITUDE_BIN_WIDTH_TENTH_DBM = 10;
 const ROWS_PER_SECOND = 10;
+const MIN_FREQUENCY_GHZ = 0;
+const MAX_FREQUENCY_GHZ = 60;
+const MIN_ZOOM_WIDTH_GHZ = 0.1;
 
 @Component({
   selector: 'app-live-dashboard-page',
@@ -17,12 +20,23 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
   protected readonly i18n = inject(LanguageService);
   protected readonly stream = inject(WaterfallStreamService);
   protected readonly canvas = viewChild<ElementRef<HTMLCanvasElement>>('waterfallCanvas');
-  protected readonly frequencyFromGHz = signal(8);
-  protected readonly frequencyToGHz = signal(12);
+  protected readonly frequencyFromGHz = signal(MIN_FREQUENCY_GHZ);
+  protected readonly frequencyToGHz = signal(MAX_FREQUENCY_GHZ);
   protected readonly amplitudeThresholdDbm = signal(-65);
   protected readonly isPaused = signal(false);
   protected readonly selectedRange = signal<string | null>(null);
   protected readonly cursorReadout = signal('');
+  protected readonly dragEndX = signal<number | null>(null);
+  protected readonly selectionLeft = computed(() => {
+    const start = this.pointerStartX();
+    const end = this.dragEndX();
+    return start === null || end === null ? 0 : Math.min(start, end) * 100;
+  });
+  protected readonly selectionWidth = computed(() => {
+    const start = this.pointerStartX();
+    const end = this.dragEndX();
+    return start === null || end === null ? 0 : Math.abs(start - end) * 100;
+  });
   protected readonly pausedRows = signal<WaterfallRow[] | null>(null);
   protected readonly displayRows = computed(() => this.pausedRows() ?? this.stream.rows());
   protected readonly clockNow = signal(Date.now());
@@ -57,7 +71,7 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
     return this.displayRows().filter((row) => row.receiverId === this.stream.selectedReceiver()).slice(-rowCount);
   });
   private clockTimer?: number;
-  private pointerStartX: number | null = null;
+  protected readonly pointerStartX = signal<number | null>(null);
   private readonly drawEffect = effect(() => {
     this.displayRows();
     this.frequencyFromGHz();
@@ -87,12 +101,20 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
 
   protected setFrequencyFrom(value: string): void {
     const parsed = Number(value);
-    if (Number.isFinite(parsed)) this.frequencyFromGHz.set(Math.max(8, Math.min(parsed, this.frequencyToGHz() - 0.1)));
+    if (Number.isFinite(parsed)) {
+      const from = Math.max(MIN_FREQUENCY_GHZ, Math.min(parsed, this.frequencyToGHz() - MIN_ZOOM_WIDTH_GHZ));
+      this.frequencyFromGHz.set(from);
+      this.stream.configureFrequencyRange(from, this.frequencyToGHz());
+    }
   }
 
   protected setFrequencyTo(value: string): void {
     const parsed = Number(value);
-    if (Number.isFinite(parsed)) this.frequencyToGHz.set(Math.min(12, Math.max(parsed, this.frequencyFromGHz() + 0.1)));
+    if (Number.isFinite(parsed)) {
+      const to = Math.min(MAX_FREQUENCY_GHZ, Math.max(parsed, this.frequencyFromGHz() + MIN_ZOOM_WIDTH_GHZ));
+      this.frequencyToGHz.set(to);
+      this.stream.configureFrequencyRange(this.frequencyFromGHz(), to);
+    }
   }
 
   protected setAmplitude(value: string): void {
@@ -115,6 +137,7 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
     if (!canvas) return;
     const bounds = canvas.getBoundingClientRect();
     const xRatio = Math.max(0, Math.min(0.999_999, (event.clientX - bounds.left) / bounds.width));
+    if (this.pointerStartX() !== null) this.dragEndX.set(xRatio);
     const yRatio = Math.max(0, Math.min(0.999_999, (event.clientY - bounds.top) / bounds.height));
     const frequencyGHz = this.frequencyFromGHz() + xRatio * (this.frequencyToGHz() - this.frequencyFromGHz());
     const reversedRows = [...this.visibleRows()].reverse();
@@ -132,30 +155,40 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
   protected onPointerDown(event: PointerEvent): void {
     if (event.button !== 0) return;
     const bounds = (event.currentTarget as HTMLCanvasElement).getBoundingClientRect();
-    this.pointerStartX = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+    const startX = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+    this.pointerStartX.set(startX);
+    this.dragEndX.set(startX);
     (event.currentTarget as HTMLCanvasElement).setPointerCapture(event.pointerId);
   }
 
   protected onPointerUp(event: PointerEvent): void {
-    if (this.pointerStartX === null) return;
+    const startX = this.pointerStartX();
+    if (startX === null) return;
     const bounds = (event.currentTarget as HTMLCanvasElement).getBoundingClientRect();
     const endX = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-    const low = Math.min(this.pointerStartX, endX);
-    const high = Math.max(this.pointerStartX, endX);
-    this.pointerStartX = null;
-    if (high - low < 0.02) return;
+    const low = Math.min(startX, endX);
+    const high = Math.max(startX, endX);
+    this.pointerStartX.set(null);
+    if (high - low < 0.02) {
+      this.dragEndX.set(null);
+      return;
+    }
     const widthGHz = this.frequencyToGHz() - this.frequencyFromGHz();
-    const from = Math.max(8, Math.floor((this.frequencyFromGHz() + low * widthGHz) * 10) / 10);
-    const to = Math.min(12, Math.ceil((this.frequencyFromGHz() + high * widthGHz) * 10) / 10);
+    const from = Math.max(MIN_FREQUENCY_GHZ, Math.floor((this.frequencyFromGHz() + low * widthGHz) * 10) / 10);
+    const to = Math.min(MAX_FREQUENCY_GHZ, Math.ceil((this.frequencyFromGHz() + high * widthGHz) * 10) / 10);
     this.frequencyFromGHz.set(from);
-    this.frequencyToGHz.set(Math.max(from + 0.1, to));
+    this.frequencyToGHz.set(Math.max(from + MIN_ZOOM_WIDTH_GHZ, to));
     this.selectedRange.set(`${from.toFixed(1)}–${Math.max(from + 0.1, to).toFixed(1)} GHz`);
+    this.dragEndX.set(null);
+    this.stream.configureFrequencyRange(this.frequencyFromGHz(), this.frequencyToGHz());
   }
 
   protected useFullFrequencyRange(): void {
-    this.frequencyFromGHz.set(8);
-    this.frequencyToGHz.set(12);
+    this.frequencyFromGHz.set(MIN_FREQUENCY_GHZ);
+    this.frequencyToGHz.set(MAX_FREQUENCY_GHZ);
     this.selectedRange.set(null);
+    this.dragEndX.set(null);
+    this.stream.configureFrequencyRange(MIN_FREQUENCY_GHZ, MAX_FREQUENCY_GHZ);
   }
 
   private drawWaterfall(): void {
@@ -177,12 +210,10 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
     const visibleCount = Math.max(1, this.stream.timeWindowSeconds() * ROWS_PER_SECOND);
     const displayedRows = this.visibleRows().slice(-visibleCount).reverse();
     const rowHeight = height / visibleCount;
-    const startBin = Math.max(0, Math.floor((this.frequencyFromGHz() - 8) * 50));
-    const endBin = Math.min(displayedRows[0]?.frequencyBinCount ?? 200, Math.ceil((this.frequencyToGHz() - 8) * 50));
-    const binCount = Math.max(1, endBin - startBin);
     const minAmplitudeBin = Math.max(0, Math.ceil((this.amplitudeThresholdDbm() * 10 - (displayedRows[0]?.minPowerTenthDbm ?? -800)) / AMPLITUDE_BIN_WIDTH_TENTH_DBM));
     let maximumCount = 0;
     for (const row of displayedRows) {
+      const { startBin, endBin } = this.frequencyBinsForRow(row);
       for (let frequencyBin = startBin; frequencyBin < endBin; frequencyBin++) {
         maximumCount = Math.max(maximumCount, this.sumAmplitudeBins(row, frequencyBin, minAmplitudeBin));
       }
@@ -202,14 +233,19 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
         context.stroke();
         return;
       }
-      for (let localBin = 0; localBin < binCount; localBin++) {
-        const count = this.sumAmplitudeBins(row, startBin + localBin, minAmplitudeBin);
+      const { startBin, endBin } = this.frequencyBinsForRow(row);
+      const frequencyFrom = row.minFrequencyKHz / 1_000_000;
+      const frequencySpan = (row.maxFrequencyKHz - row.minFrequencyKHz) / 1_000_000;
+      const viewSpan = this.frequencyToGHz() - this.frequencyFromGHz();
+      const dotSize = Math.max(1, 1.5 * pixelRatio);
+      for (let frequencyBin = startBin; frequencyBin < endBin; frequencyBin++) {
+        const count = this.sumAmplitudeBins(row, frequencyBin, minAmplitudeBin);
         if (count === 0) continue;
         const intensity = Math.log1p(count) / Math.log1p(Math.max(1, maximumCount));
         context.fillStyle = densityColor(intensity);
-        const x = Math.floor(localBin * width / binCount);
-        const nextX = Math.ceil((localBin + 1) * width / binCount);
-        context.fillRect(x, y, Math.max(1, nextX - x), Math.max(1, nextY - y));
+        const binFrequency = frequencyFrom + (frequencyBin + 0.5) * frequencySpan / row.frequencyBinCount;
+        const x = Math.round((binFrequency - this.frequencyFromGHz()) / viewSpan * width - dotSize / 2);
+        context.fillRect(x, y + Math.max(0, (nextY - y - dotSize) / 2), dotSize, Math.min(dotSize, Math.max(1, nextY - y)));
       }
     });
 
@@ -240,9 +276,22 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
     return count;
   }
 
+  private frequencyBinsForRow(row: WaterfallRow): { startBin: number; endBin: number } {
+    const rowFrom = row.minFrequencyKHz / 1_000_000;
+    const rowTo = row.maxFrequencyKHz / 1_000_000;
+    const span = rowTo - rowFrom;
+    if (span <= 0 || row.frequencyBinCount <= 0) return { startBin: 0, endBin: 0 };
+    const from = Math.max(rowFrom, this.frequencyFromGHz());
+    const to = Math.min(rowTo, this.frequencyToGHz());
+    if (to <= from) return { startBin: 0, endBin: 0 };
+    return {
+      startBin: Math.max(0, Math.floor((from - rowFrom) / span * row.frequencyBinCount)),
+      endBin: Math.min(row.frequencyBinCount, Math.ceil((to - rowFrom) / span * row.frequencyBinCount)),
+    };
+  }
+
   private filteredPulseCount(row: WaterfallRow): number {
-    const from = Math.max(0, Math.floor((this.frequencyFromGHz() - 8) * row.frequencyBinCount / 4));
-    const to = Math.min(row.frequencyBinCount, Math.ceil((this.frequencyToGHz() - 8) * row.frequencyBinCount / 4));
+    const { startBin: from, endBin: to } = this.frequencyBinsForRow(row);
     const minAmplitudeBin = Math.max(0, Math.ceil((this.amplitudeThresholdDbm() * 10 - row.minPowerTenthDbm) / AMPLITUDE_BIN_WIDTH_TENTH_DBM));
     let count = 0;
     for (let amplitudeBin = minAmplitudeBin; amplitudeBin < row.amplitudeBinCount; amplitudeBin++) {
@@ -253,8 +302,11 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
   }
 
   private filteredPulseCountAtFrequency(row: WaterfallRow, frequencyGHz: number): number {
+    const rowFrom = row.minFrequencyKHz / 1_000_000;
+    const rowSpan = (row.maxFrequencyKHz - row.minFrequencyKHz) / 1_000_000;
+    if (frequencyGHz < rowFrom || frequencyGHz >= rowFrom + rowSpan || rowSpan <= 0) return 0;
     const frequencyBin = Math.max(0, Math.min(row.frequencyBinCount - 1,
-      Math.floor((frequencyGHz - 8) * row.frequencyBinCount / 4)));
+      Math.floor((frequencyGHz - rowFrom) * row.frequencyBinCount / rowSpan)));
     return this.sumAmplitudeBins(row, frequencyBin,
       Math.max(0, Math.ceil((this.amplitudeThresholdDbm() * 10 - row.minPowerTenthDbm) / AMPLITUDE_BIN_WIDTH_TENTH_DBM)));
   }
