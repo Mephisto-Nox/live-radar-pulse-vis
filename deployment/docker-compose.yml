@@ -41,6 +41,7 @@ services:
       SERVER_PORT: 8080
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: pdw-waterfall-v1
+      KAFKA_AUTO_OFFSET_RESET: latest
       UDP_BIND_ADDRESS: 0.0.0.0
       UDP_PORT: ${UDP_PORT:-5005}
       RECEIVER_ID: ${RECEIVER_ID:-RX-01}

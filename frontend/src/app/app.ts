@@ -1,6 +1,7 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, OnInit, computed, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { PacketStreamService } from './packet-stream.service';
+import { Language, LanguageService } from './language.service';
+import { WaterfallStreamService } from './waterfall-stream.service';
 
 @Component({
   imports: [RouterLink, RouterLinkActive, RouterOutlet],
@@ -8,15 +9,23 @@ import { PacketStreamService } from './packet-stream.service';
   styleUrl: './app.scss',
   templateUrl: './app.html',
 })
-export class App {
-  private readonly packetStream = inject(PacketStreamService);
-  protected readonly stream = this.packetStream;
+export class App implements OnInit {
+  protected readonly i18n = inject(LanguageService);
+  protected readonly stream = inject(WaterfallStreamService);
   protected readonly connectionLabel = computed(() => {
     switch (this.stream.status()) {
-      case 'connected': return 'Paketstream verbunden';
-      case 'connecting': return 'Paketstream verbindet';
-      case 'error': return 'Paketstream gestört';
-      default: return 'Paketstream getrennt';
+      case 'connected': return this.i18n.t('connected');
+      case 'connecting': return this.i18n.t('connecting');
+      case 'error': return this.i18n.t('streamError');
+      default: return this.i18n.t('disconnected');
     }
   });
+
+  protected setLanguage(language: string): void {
+    this.i18n.setLanguage(language as Language);
+  }
+
+  ngOnInit(): void {
+    this.stream.connect();
+  }
 }

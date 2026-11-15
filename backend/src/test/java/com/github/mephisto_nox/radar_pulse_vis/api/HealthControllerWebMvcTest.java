@@ -10,7 +10,10 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest(properties = "spring.kafka.admin.auto-create=false")
+@SpringBootTest(properties = {
+    "spring.kafka.admin.auto-create=false",
+    "spring.kafka.listener.auto-startup=false"
+})
 @AutoConfigureMockMvc
 class HealthControllerWebMvcTest {
 

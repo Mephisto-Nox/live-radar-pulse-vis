@@ -1,0 +1,20 @@
+:host { display: block; }
+.start-screen { display: grid; min-height: min(660px, calc(100vh - 190px)); grid-template-columns: minmax(0, 1.15fr) minmax(320px, .75fr); align-items: center; gap: clamp(36px, 8vw, 120px); padding: 38px clamp(16px, 5vw, 80px); }
+.welcome-copy { max-width: 620px; }
+.eyebrow { margin: 0 0 14px; color: #438d8a; font-size: 11px; font-weight: 700; letter-spacing: .16em; }
+h1 { margin: 0; color: #19293c; font-size: clamp(34px, 5vw, 54px); font-weight: 650; letter-spacing: -.045em; }
+.welcome-copy > p:not(.eyebrow) { max-width: 500px; margin: 16px 0 28px; color: #748396; font-size: 16px; line-height: 1.55; }
+.primary-action { display: inline-flex; min-height: 42px; align-items: center; gap: 18px; padding: 0 16px; border-radius: 6px; color: #fff; background: #167f7e; font-size: 13px; font-weight: 650; text-decoration: none; transition: background .15s ease; }
+.primary-action:hover { background: #116d6d; }
+.primary-action span { font-size: 18px; }
+.status-overview { padding: 22px; border: 1px solid #e1e8ed; border-radius: 9px; background: #fff; box-shadow: 0 10px 32px rgba(28, 48, 69, .05); }
+.status-title { display: flex; align-items: center; gap: 12px; padding-bottom: 18px; border-bottom: 1px solid #edf0f3; }
+.pulse-icon { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 9px; color: #168d84; background: #edf8f5; font-size: 22px; }
+h2 { margin: 0; color: #324358; font-size: 14px; }
+.status-title p { margin: 5px 0 0; color: #8996a4; font-size: 11px; }
+.status-row { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 10px; min-height: 45px; border-bottom: 1px solid #f0f2f4; color: #5f6e81; font-size: 12px; }
+.status-row:last-child { border-bottom: 0; }
+.status-row strong { color: #8c98a6; font-size: 10px; letter-spacing: .04em; }
+.status-indicator { width: 8px; height: 8px; border-radius: 50%; background: #b6c0c9; }
+.status-indicator.up { background: #37ad8c; box-shadow: 0 0 0 3px #e4f4ef; }
+@media (max-width: 760px) { .start-screen { min-height: 0; grid-template-columns: 1fr; gap: 35px; padding: 32px 4px; } .status-overview { max-width: 520px; } }

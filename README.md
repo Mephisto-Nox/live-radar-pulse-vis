@@ -1,6 +1,6 @@
 # Pulse Vision
 
-Monorepo for the Pulse Vision radar receiver UI and its Java API. The backend accepts the documented UDP datagram format, validates and decodes the PDW fields used by the waterfall, then publishes one JSON batch per UDP datagram to Apache Kafka. The existing dashboard remains a separate demo metadata stream; it is not a production visualization consumer.
+Monorepo for the Pulse Vision radar receiver UI and its Java API. The backend accepts the documented UDP datagram format, validates and decodes PDWs, publishes JSON batches to Apache Kafka, consumes those batches, and sends server-aggregated waterfall tiles to the browser. The AOA panel is currently a non-functional layout placeholder.
 
 ## Repository layout
 
@@ -22,9 +22,9 @@ Requirements: Docker with the Compose plugin. From the repository root:
 docker compose -f deployment/docker-compose.yml up --build
 ```
 
-Open `http://localhost:8080`. The frontend is served by Nginx; `/api/health` and `/api/pdw/health` are proxied to the backend. Kafka is available on `localhost:9092`; the backend uses its internal Compose address `kafka:9092`. Send simulator datagrams to `127.0.0.1:5005` (UDP).
+Open `http://localhost:8080`. German is the default UI language; use the DE/EN control in the top bar to switch language. The frontend is served by Nginx; `/api/health` and `/api/pdw/health` are proxied to the backend. Kafka is available on `localhost:9092`; the backend uses its internal Compose address `kafka:9092`. Send simulator datagrams to `127.0.0.1:5005` (UDP).
 
-The Live-Übersicht connects to `/ws/packets` and displays generated demo packet metadata (receiver ID, sequence, receive time, and payload length). The demo emits one packet every 250 ms. Only the newest 100 items are kept in the browser. PDW batches are published to the separate Kafka topic `pdw-waterfall-v1`.
+The Live-Übersicht connects to `/ws/waterfall`. The backend consumes Kafka PDW batches and aggregates a 200-frequency-bin by 41-amplitude-bin histogram per 100 ms row. Only the selected receiver's recent waterfall history is streamed to the browser. The adjacent AOA panel is intentionally non-functional in this step.
 
 Stop the services with `docker compose -f deployment/docker-compose.yml down`.
 
@@ -70,9 +70,10 @@ Open the URL printed by Angular CLI (normally `http://localhost:4200`). The deve
 
 ### Packet-flow design
 
-- `PacketReceiver` is the replaceable input boundary; the current implementation is a synthetic demo source.
-- The existing `PacketChannel`/`InMemoryPacketChannel` and WebSocket path remains a separate demo metadata stream for the current dashboard; it is not used for PDW delivery.
-- The UDP PDW path publishes directly to Kafka through `PdwKafkaPublisher`; it is configured independently from the demo UI path.
+- `PacketReceiver` is the replaceable input boundary; the synthetic demo receiver and UDP PDW receiver remain separate flows.
+- UDP PDWs are published to Kafka by `PdwKafkaPublisher`; `WaterfallKafkaConsumer` consumes the topic independently and passes decoded batches to `WaterfallAggregator`.
+- Aggregation runs in server memory at 10 Hz using UDP receive event-time. The most recent 30 event-time seconds are kept per discovered receiver. The browser receives histogram tiles, not individual PDWs, and applies frequency/amplitude filters locally. If Kafka falls behind, the newest processed interval remains visible and the UI latency warning reflects the lag rather than silently dropping all rows as late.
+- The legacy `/ws/packets` endpoint remains a demo metadata stream and is not used by the waterfall screen.
 - `GET /api/health` reports API status and the packet-pipeline lifecycle state. Actuator readiness/liveness endpoints remain available.
 
 ### UDP-to-Kafka PDW flow
@@ -81,10 +82,13 @@ Open the URL printed by Angular CLI (normally `http://localhost:4200`). The deve
 - The receiver accepts the format in `.docs/interfaces/pdw-format-description.md`: a 22-byte big-endian header, packed 24-byte little-endian PDWs, then optional filler. It checks sync word, declared PDW length, and CRC-32 over only the PDWs; filler is ignored.
 - This documented wire format is the supplied simulator/test format, not a standardized real receiver protocol; adapt the decoder when the production receiver format is confirmed.
 - One Kafka JSON record is published per valid UDP datagram, keyed by receiver ID. Each PDW carries `toaNs`, `rfKHz`, `pwNs`, `aoaHundredthDegree`, and `powerTenthDbm`; units remain the raw documented units. The simulator-only emitter ID and flags are not forwarded.
+- The Kafka consumer creates one waterfall row per 100 ms UDP receive-time window. The row contains 200 frequency bins (20 MHz each, 8–12 GHz) by 41 amplitude bins (1 dB each, −80 to −40 dBm), plus input count. Out-of-band frequencies and powers below −80 dBm are excluded from the histogram and counted as ignored.
+- `/ws/waterfall` first exchanges a JSON status/configuration message, then sends binary `PVWF` version-1 tiles. Each tile has a 44-byte little-endian header, UTF-8 receiver ID, followed by amplitude-major unsigned 16-bit saturating counts. Missing UDP sequence numbers mark the affected row as a gap; a valid empty row remains distinguishable from packet loss. WebSocket clients choose receiver and time window; the frequency and amplitude filters are applied locally to the histogram.
 - The receiver ID is configured statically (`RECEIVER_ID`) because the datagram format does not contain one. Dynamic source registration is not implemented.
-- Invalid datagrams are discarded and counted. Kafka submission uses a bounded queue and asynchronous producer; when the queue is full, the newest batch is discarded and counted rather than blocking UDP reception. Queue drops, decode rejects, decoded PDWs, and publish results are reported by `GET /api/pdw/health`. Its Kafka status reports publisher-worker lifecycle, not an active broker probe.
+- Invalid datagrams are discarded and counted. Kafka submission uses a bounded queue and asynchronous producer; when the queue is full, the newest batch is discarded and counted rather than blocking UDP reception. Queue drops, decode rejects, decoded PDWs, publisher results, consumer batches and recovered/expired late batches are reported by `GET /api/pdw/health`. Its Kafka status reports publisher-worker lifecycle, not an active broker probe.
+- The Kafka listener consumes poll results in batches (default maximum 1,000 records) and uses a 10-minute poll interval. Sustained rates may still exceed a single keyed receiver partition's throughput; monitor `consumedBatches` against `publishedBatches` and broker consumer-group lag. `KAFKA_AUTO_OFFSET_RESET` defaults to `latest` so a new group does not replay expired history; set it to `earliest` only when intentionally replaying retained data. Rows are revised while retained when delayed consumer batches arrive; batches older than the 30-second event-time window are counted as expired.
 - The wire format uses unsigned 64-bit TOA fields. This Java implementation accepts only values through `Long.MAX_VALUE`; larger TOA values are rejected. The simulator's elapsed-time values are expected to remain within that range.
-- The topic has 16 partitions, one replica for local development, and a five-minute retention setting. The production Compose file expects an externally managed Kafka cluster through `KAFKA_BOOTSTRAP_SERVERS`; ensure the service account can create/configure the topic or provision it with matching settings. SASL/TLS credentials and trust configuration for production Kafka are not wired yet; do not expose the local PLAINTEXT configuration to an untrusted network.
+- The topic has 16 partitions, one replica for local development, and a five-minute retention setting. Production Compose expects an externally managed Kafka cluster through `KAFKA_BOOTSTRAP_SERVERS`; the backend requests explicit topic creation/configuration, so either grant that permission or pre-provision `pdw-waterfall-v1` with matching settings. Broker-side implicit topic auto-creation is disabled locally. SASL/TLS credentials and trust configuration for production Kafka are not wired yet; do not expose the local PLAINTEXT configuration to an untrusted network.
 
 Inspect published records in a second terminal:
 
@@ -104,8 +108,9 @@ The deployment workflow validates Compose syntax and Kubernetes YAML structure. 
 
 - `GET /api/health` — application and packet-pipeline status
 - `GET /api/pdw/health` — UDP receiver/Kafka publisher lifecycle and ingest counters
+- `/ws/waterfall` — per-receiver server-aggregated binary waterfall tiles
 - `GET /actuator/health/readiness` and `/actuator/health/liveness` — runtime probes
-- `ws://<host>/ws/packets` — live packet metadata stream
+- `ws://<host>/ws/packets` — legacy demo packet-metadata stream
 - `udp://<host>:5005` — documented PDW datagram input (configurable)
 - Kafka topic `pdw-waterfall-v1` — JSON batches, one record per valid UDP datagram
 
