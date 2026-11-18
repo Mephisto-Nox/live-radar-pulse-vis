@@ -1,6 +1,5 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
-import { AoaDisplay } from './aoa-display';
 import { LanguageService } from './language.service';
 import { WaterfallRow, WaterfallStreamService } from './waterfall-stream.service';
 
@@ -12,7 +11,7 @@ const MIN_ZOOM_WIDTH_GHZ = 0.1;
 
 @Component({
   selector: 'app-live-dashboard-page',
-  imports: [DecimalPipe, AoaDisplay],
+  imports: [DecimalPipe],
   styleUrl: './live-dashboard-page.scss',
   templateUrl: './live-dashboard-page.html',
 })
@@ -46,6 +45,13 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
     if (this.stream.status() === 'error') return this.i18n.t('streamError');
     return this.i18n.t('disconnected');
   });
+  protected readonly pipelineHint = computed(() => {
+    const metrics = this.stream.pipelineMetrics();
+    if (metrics.receivedDatagrams === 0) return this.i18n.t('noDatagramsHint');
+    if (metrics.decodedPdws === 0 && metrics.rejectedDatagrams > 0) return this.i18n.t('rejectedDatagramsHint');
+    if (metrics.decodedPdws > 0 && metrics.consumedBatches === 0) return this.i18n.t('noConsumedBatchesHint');
+    return this.i18n.t('noWaterfallHint');
+  });
   protected readonly latestRow = computed(() => this.displayRows().at(-1));
   protected readonly latencyMs = computed(() => {
     this.clockNow();
@@ -72,6 +78,7 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
   });
   private clockTimer?: number;
   protected readonly pointerStartX = signal<number | null>(null);
+  private readonly filteredCountsCache = new WeakMap<WaterfallRow, { startAmplitudeBin: number; counts: Uint32Array }>();
   private readonly drawEffect = effect(() => {
     this.displayRows();
     this.frequencyFromGHz();
@@ -84,11 +91,13 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
+    this.stream.connect();
     this.clockTimer = window.setInterval(() => this.clockNow.set(Date.now()), 500);
   }
 
   ngOnDestroy(): void {
     window.clearInterval(this.clockTimer);
+    this.stream.disconnect();
   }
 
   protected setTimeWindow(seconds: number): void {
@@ -269,11 +278,21 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
   }
 
   private sumAmplitudeBins(row: WaterfallRow, frequencyBin: number, startAmplitudeBin: number): number {
-    let count = 0;
+    return this.filteredFrequencyCounts(row, startAmplitudeBin)[frequencyBin] ?? 0;
+  }
+
+  private filteredFrequencyCounts(row: WaterfallRow, startAmplitudeBin: number): Uint32Array {
+    const cached = this.filteredCountsCache.get(row);
+    if (cached?.startAmplitudeBin === startAmplitudeBin) return cached.counts;
+    const counts = new Uint32Array(row.frequencyBinCount);
     for (let amplitudeBin = startAmplitudeBin; amplitudeBin < row.amplitudeBinCount; amplitudeBin++) {
-      count += row.counts[amplitudeBin * row.frequencyBinCount + frequencyBin] ?? 0;
+      const offset = amplitudeBin * row.frequencyBinCount;
+      for (let frequencyBin = 0; frequencyBin < row.frequencyBinCount; frequencyBin++) {
+        counts[frequencyBin] += row.counts[offset + frequencyBin] ?? 0;
+      }
     }
-    return count;
+    this.filteredCountsCache.set(row, { startAmplitudeBin, counts });
+    return counts;
   }
 
   private frequencyBinsForRow(row: WaterfallRow): { startBin: number; endBin: number } {
@@ -293,11 +312,9 @@ export class LiveDashboardPage implements OnInit, OnDestroy {
   private filteredPulseCount(row: WaterfallRow): number {
     const { startBin: from, endBin: to } = this.frequencyBinsForRow(row);
     const minAmplitudeBin = Math.max(0, Math.ceil((this.amplitudeThresholdDbm() * 10 - row.minPowerTenthDbm) / AMPLITUDE_BIN_WIDTH_TENTH_DBM));
+    const frequencyCounts = this.filteredFrequencyCounts(row, minAmplitudeBin);
     let count = 0;
-    for (let amplitudeBin = minAmplitudeBin; amplitudeBin < row.amplitudeBinCount; amplitudeBin++) {
-      const offset = amplitudeBin * row.frequencyBinCount;
-      for (let frequencyBin = from; frequencyBin < to; frequencyBin++) count += row.counts[offset + frequencyBin] ?? 0;
-    }
+    for (let frequencyBin = from; frequencyBin < to; frequencyBin++) count += frequencyCounts[frequencyBin];
     return count;
   }
 

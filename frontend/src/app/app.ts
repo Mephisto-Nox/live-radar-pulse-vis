@@ -1,6 +1,7 @@
-import { Component, OnInit, computed, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { Language, LanguageService } from './language.service';
+import { ThemeService } from './theme.service';
 import { WaterfallStreamService } from './waterfall-stream.service';
 
 @Component({
@@ -9,23 +10,23 @@ import { WaterfallStreamService } from './waterfall-stream.service';
   styleUrl: './app.scss',
   templateUrl: './app.html',
 })
-export class App implements OnInit {
+export class App implements OnInit, OnDestroy {
   protected readonly i18n = inject(LanguageService);
+  protected readonly theme = inject(ThemeService);
   protected readonly stream = inject(WaterfallStreamService);
-  protected readonly connectionLabel = computed(() => {
-    switch (this.stream.status()) {
-      case 'connected': return this.i18n.t('connected');
-      case 'connecting': return this.i18n.t('connecting');
-      case 'error': return this.i18n.t('streamError');
-      default: return this.i18n.t('disconnected');
-    }
-  });
-
   protected setLanguage(language: string): void {
     this.i18n.setLanguage(language as Language);
   }
 
+  protected toggleTheme(): void {
+    this.theme.toggle();
+  }
+
   ngOnInit(): void {
-    this.stream.connect();
+    this.stream.startHealthMonitoring();
+  }
+
+  ngOnDestroy(): void {
+    this.stream.stopHealthMonitoring();
   }
 }

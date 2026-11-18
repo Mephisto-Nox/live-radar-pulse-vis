@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { AoaSector } from './aoa-types';
 
 export interface WaterfallRow {
   receiverId: string;
@@ -17,6 +18,14 @@ export interface WaterfallRow {
 
 export type WaterfallConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
+export interface PdwPipelineMetrics {
+  receivedDatagrams: number;
+  rejectedDatagrams: number;
+  decodedPdws: number;
+  publishedBatches: number;
+  consumedBatches: number;
+}
+
 const MAX_VISIBLE_ROWS = 300;
 const TILE_HEADER_BYTES = 44;
 
@@ -29,8 +38,16 @@ export class WaterfallStreamService {
   readonly timeWindowSeconds = signal(10);
   readonly frequencyFromGHz = signal(0);
   readonly frequencyToGHz = signal(60);
+  readonly aoaSector = signal<AoaSector | null>(null);
   readonly udpStatus = signal<'UP' | 'DOWN' | 'UNKNOWN'>('UNKNOWN');
   readonly kafkaStatus = signal<'UP' | 'DOWN' | 'UNKNOWN'>('UNKNOWN');
+  readonly pipelineMetrics = signal<PdwPipelineMetrics>({
+    receivedDatagrams: 0,
+    rejectedDatagrams: 0,
+    decodedPdws: 0,
+    publishedBatches: 0,
+    consumedBatches: 0,
+  });
 
   private socket?: WebSocket;
   private reconnectTimer?: number;
@@ -74,16 +91,22 @@ export class WaterfallStreamService {
       }
     };
 
+  }
+
+  startHealthMonitoring(): void {
     this.refreshHealth();
     this.healthTimer ??= window.setInterval(() => this.refreshHealth(), 2_000);
+  }
+
+  stopHealthMonitoring(): void {
+    window.clearInterval(this.healthTimer);
+    this.healthTimer = undefined;
   }
 
   disconnect(): void {
     this.manuallyClosed = true;
     window.clearTimeout(this.reconnectTimer);
-    window.clearInterval(this.healthTimer);
     this.reconnectTimer = undefined;
-    this.healthTimer = undefined;
     const socket = this.socket;
     this.socket = undefined;
     socket?.close();
@@ -102,18 +125,27 @@ export class WaterfallStreamService {
     this.sendConfiguration();
   }
 
+  configureAoaSector(sector: AoaSector | null): void {
+    this.aoaSector.set(sector);
+    this.sendConfiguration();
+  }
+
   clearRows(): void {
     this.rows.set([]);
   }
 
   private sendConfiguration(): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
+    const sector = this.aoaSector();
     this.socket.send(JSON.stringify({
       type: 'configure',
       receiverId: this.selectedReceiver(),
       timeWindowSeconds: this.timeWindowSeconds(),
       frequencyFromGHz: this.frequencyFromGHz(),
       frequencyToGHz: this.frequencyToGHz(),
+      angleSectorEnabled: sector !== null,
+      angleSectorFromDeg: sector?.startDegrees ?? 0,
+      angleSectorToDeg: sector?.endDegrees ?? 0,
     }));
   }
 
@@ -203,9 +235,23 @@ export class WaterfallStreamService {
       if (!response.ok) throw new Error(`Health endpoint returned ${response.status}`);
       const health: unknown = await response.json();
       if (typeof health === 'object' && health !== null) {
-        const status = health as { udpReceiver?: unknown; kafkaPublisherWorker?: unknown };
+        const status = health as {
+          udpReceiver?: unknown;
+          kafkaPublisherWorker?: unknown;
+          metrics?: Partial<PdwPipelineMetrics>;
+          waterfallConsumer?: { consumedBatches?: unknown };
+        };
         this.udpStatus.set(status.udpReceiver === 'UP' ? 'UP' : 'DOWN');
         this.kafkaStatus.set(status.kafkaPublisherWorker === 'UP' ? 'UP' : 'DOWN');
+        const metrics = status.metrics;
+        const numberOrZero = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
+        this.pipelineMetrics.set({
+          receivedDatagrams: numberOrZero(metrics?.receivedDatagrams),
+          rejectedDatagrams: numberOrZero(metrics?.rejectedDatagrams),
+          decodedPdws: numberOrZero(metrics?.decodedPdws),
+          publishedBatches: numberOrZero(metrics?.publishedBatches),
+          consumedBatches: numberOrZero(status.waterfallConsumer?.consumedBatches),
+        });
       }
     } catch {
       this.udpStatus.set('UNKNOWN');

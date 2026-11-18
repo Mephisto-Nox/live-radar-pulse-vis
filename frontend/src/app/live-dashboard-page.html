@@ -55,7 +55,7 @@
   <div class="notice gap-notice" role="status"><span aria-hidden="true">▧</span>{{ i18n.t('gapWarning') }}</div>
 }
 
-<main class="display-grid">
+<main class="waterfall-page">
   <section class="waterfall-panel" aria-labelledby="waterfall-heading">
     <header class="panel-heading">
       <div class="panel-title"><span class="panel-mark waterfall-mark" aria-hidden="true">▥</span><div><h2 id="waterfall-heading">{{ i18n.t('dashboardTitle') }}</h2><p>{{ stream.selectedReceiver() }}</p></div></div>
@@ -74,7 +74,17 @@
           <span class="zoom-selection" [style.left.%]="selectionLeft()" [style.width.%]="selectionWidth()" aria-hidden="true"></span>
         }
         @if (visibleRows().length === 0) {
-          <div class="empty-plot" role="status"><strong>{{ i18n.t('noWaterfallData') }}</strong><span>{{ i18n.t('noWaterfallHint') }}</span></div>
+          <div class="empty-plot" role="status">
+            <strong>{{ i18n.t('noWaterfallData') }}</strong>
+            <span>{{ pipelineHint() }}</span>
+            <small>{{ i18n.t('udpKafkaStatus', { udp: stream.udpStatus(), kafka: stream.kafkaStatus(), websocket: statusText() }) }}</small>
+            <small>{{ i18n.t('pipelineCounters', {
+              received: stream.pipelineMetrics().receivedDatagrams,
+              decoded: stream.pipelineMetrics().decodedPdws,
+              published: stream.pipelineMetrics().publishedBatches,
+              consumed: stream.pipelineMetrics().consumedBatches
+            }) }}</small>
+          </div>
         }
         <span class="now-marker">{{ i18n.t('now') }}</span>
       </div>
@@ -90,5 +100,4 @@
     </footer>
   </section>
 
-  <app-aoa-display />
 </main>
