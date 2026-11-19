@@ -1,0 +1,86 @@
+{
+  "udp": {
+    "host": "127.0.0.1",
+    "port": 5005,
+    "mtu_payload": 1472,
+    "pdws_per_packet": null,
+    "overhead_percent": 10,
+    "count_ip_udp_headers": false,
+    "filler": "zeros"
+  },
+  "packet_header": {
+    "byte_order": "big",
+    "fields": [
+      {
+        "name": "sync",
+        "type": "u32",
+        "const": "0xA5A55A5A"
+      },
+      {
+        "name": "seq",
+        "type": "u32",
+        "source": "packet_seq"
+      },
+      {
+        "name": "pdw_count",
+        "type": "u16",
+        "source": "pdw_count"
+      },
+      {
+        "name": "first_toa_us",
+        "type": "u64",
+        "source": "first_toa_us"
+      },
+      {
+        "name": "crc32",
+        "type": "u32",
+        "source": "crc32_payload"
+      }
+    ]
+  },
+  "pdw_format": {
+    "byte_order": "little",
+    "fields": [
+      {
+        "name": "toa_ns",
+        "type": "u64",
+        "source": "toa_us",
+        "mult": 1000
+      },
+      {
+        "name": "freq_khz",
+        "type": "u32",
+        "source": "freq_mhz",
+        "mult": 1000
+      },
+      {
+        "name": "pw_ns",
+        "type": "u32",
+        "source": "pw_us",
+        "mult": 1000
+      },
+      {
+        "name": "amp_0p1dbm",
+        "type": "i16",
+        "source": "amp_dbm",
+        "mult": 10
+      },
+      {
+        "name": "aoa_0p01deg",
+        "type": "u16",
+        "source": "aoa_deg",
+        "mult": 100
+      },
+      {
+        "name": "emitter_id",
+        "type": "u16",
+        "source": "emitter_id"
+      },
+      {
+        "name": "flags",
+        "type": "u16",
+        "const": 0
+      }
+    ]
+  }
+}
