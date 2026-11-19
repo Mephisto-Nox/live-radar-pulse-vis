@@ -79,12 +79,18 @@ public class WaterfallWebSocketHandler extends AbstractWebSocketHandler {
                 frequencyFromGHz = 0.0;
                 frequencyToGHz = 60.0;
             }
+            int sectorStart = toHundredthDegree(command.angleSectorFromDeg());
+            int sectorEnd = toHundredthDegree(command.angleSectorToDeg());
+            boolean sectorEnabled = Boolean.TRUE.equals(command.angleSectorEnabled()) && sectorStart != sectorEnd;
             synchronized (state) {
                 state.receiverId = receiverId;
                 state.timeWindowSeconds = windowSeconds;
                 state.frequencyFromKHz = Math.round(frequencyFromGHz * 1_000_000.0);
                 state.frequencyToKHz = Math.round(frequencyToGHz * 1_000_000.0);
                 state.zoomed = frequencyFromGHz > 0.0 || frequencyToGHz < 60.0;
+                state.angleSectorEnabled = sectorEnabled;
+                state.angleSectorFromHundredthDegree = sectorStart;
+                state.angleSectorToHundredthDegree = sectorEnd;
                 state.sentRevisions.clear();
             }
             sendReceiverStatus(state.session);
@@ -129,7 +135,14 @@ public class WaterfallWebSocketHandler extends AbstractWebSocketHandler {
             for (WaterfallRow row : aggregator.changedRowsSince(state.receiverId, earliestVisible, state.sentRevisions)) {
                 try {
                 state.session.sendMessage(new BinaryMessage(encoder.encode(
-                        state.receiverId, row, state.frequencyFromKHz, state.frequencyToKHz, state.zoomed)));
+                        state.receiverId,
+                        row,
+                        state.frequencyFromKHz,
+                        state.frequencyToKHz,
+                        state.zoomed,
+                        state.angleSectorEnabled,
+                        state.angleSectorFromHundredthDegree,
+                        state.angleSectorToHundredthDegree)));
                 } catch (IOException | RuntimeException exception) {
                     sessions.remove(sessionId, state);
                     closeSession(state.session);
@@ -160,12 +173,20 @@ public class WaterfallWebSocketHandler extends AbstractWebSocketHandler {
         }
     }
 
+    private int toHundredthDegree(Double degrees) {
+        if (degrees == null || !Double.isFinite(degrees)) return 0;
+        return Math.clamp((int) Math.round(degrees * 100.0), 0, 36_000);
+    }
+
     private record ClientCommand(
             String type,
             String receiverId,
             Integer timeWindowSeconds,
             Double frequencyFromGHz,
-            Double frequencyToGHz) {}
+            Double frequencyToGHz,
+            Boolean angleSectorEnabled,
+            Double angleSectorFromDeg,
+            Double angleSectorToDeg) {}
 
     private static final class ClientState {
         private final WebSocketSession session;
@@ -174,6 +195,9 @@ public class WaterfallWebSocketHandler extends AbstractWebSocketHandler {
         private long frequencyFromKHz = WaterfallAggregator.MIN_FREQUENCY_KHZ;
         private long frequencyToKHz = WaterfallAggregator.MAX_FREQUENCY_KHZ;
         private boolean zoomed;
+        private boolean angleSectorEnabled;
+        private int angleSectorFromHundredthDegree;
+        private int angleSectorToHundredthDegree;
         private final Map<Long, Long> sentRevisions = new HashMap<>();
 
         private ClientState(WebSocketSession session) {

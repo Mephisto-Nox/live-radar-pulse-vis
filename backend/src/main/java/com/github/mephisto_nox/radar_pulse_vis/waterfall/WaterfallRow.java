@@ -6,7 +6,7 @@ public record WaterfallRow(
     boolean gap,
     long revision,
     short[] countsByAmplitudeAndFrequency,
-    int[] zoomSamples) {
+    long[] zoomSamples) {
     public WaterfallRow {
         if (inputPulseCount < 0) {
             throw new IllegalArgumentException("inputPulseCount must not be negative");
@@ -25,6 +25,6 @@ public record WaterfallRow(
             boolean gap,
             long revision,
             short[] countsByAmplitudeAndFrequency) {
-        this(startTimeMillis, inputPulseCount, gap, revision, countsByAmplitudeAndFrequency, new int[0]);
+        this(startTimeMillis, inputPulseCount, gap, revision, countsByAmplitudeAndFrequency, new long[0]);
     }
 }

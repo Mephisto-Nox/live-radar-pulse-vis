@@ -10,9 +10,10 @@ public class WaterfallTileEncoder {
     private static final byte[] MAGIC = {'P', 'V', 'W', 'F'};
     private static final int HEADER_BYTES = 44;
     private static final int VERSION = 1;
+
     public byte[] encode(String receiverId, WaterfallRow row) {
         return encode(receiverId, row, WaterfallAggregator.MIN_FREQUENCY_KHZ,
-                WaterfallAggregator.MAX_FREQUENCY_KHZ, false);
+                WaterfallAggregator.MAX_FREQUENCY_KHZ, false, false, 0, 0);
     }
 
     public byte[] encode(
@@ -21,6 +22,19 @@ public class WaterfallTileEncoder {
             long requestedMinFrequencyKHz,
             long requestedMaxFrequencyKHz,
             boolean zoomed) {
+        return encode(receiverId, row, requestedMinFrequencyKHz, requestedMaxFrequencyKHz,
+                zoomed, false, 0, 0);
+    }
+
+    public byte[] encode(
+            String receiverId,
+            WaterfallRow row,
+            long requestedMinFrequencyKHz,
+            long requestedMaxFrequencyKHz,
+            boolean zoomed,
+            boolean sectorEnabled,
+            int sectorStartHundredthDegree,
+            int sectorEndHundredthDegree) {
         byte[] receiver = receiverId.getBytes(StandardCharsets.UTF_8);
         if (receiver.length > 0xffff) {
             throw new IllegalArgumentException("Receiver ID is too long for the waterfall tile protocol");
@@ -49,7 +63,10 @@ public class WaterfallTileEncoder {
             frequencyBinCount = endZoomBin - firstZoomBin;
             tileMinFrequencyKHz = WaterfallAggregator.MIN_FREQUENCY_KHZ + firstZoomBin * zoomBinWidthKHz;
             tileMaxFrequencyKHz = WaterfallAggregator.MIN_FREQUENCY_KHZ + endZoomBin * zoomBinWidthKHz;
-            counts = zoomCounts(row, firstZoomBin, endZoomBin);
+            counts = zoomCounts(row, firstZoomBin, endZoomBin, sectorEnabled,
+                    sectorStartHundredthDegree, sectorEndHundredthDegree);
+        } else if (sectorEnabled) {
+            counts = sectorCounts(row, sectorStartHundredthDegree, sectorEndHundredthDegree);
         }
 
         ByteBuffer tile = ByteBuffer.allocate(HEADER_BYTES + receiver.length + counts.length * Short.BYTES)
@@ -75,17 +92,46 @@ public class WaterfallTileEncoder {
         return tile.array();
     }
 
-    private short[] zoomCounts(WaterfallRow row, int firstZoomBin, int endZoomBin) {
+    private short[] zoomCounts(
+            WaterfallRow row,
+            int firstZoomBin,
+            int endZoomBin,
+            boolean sectorEnabled,
+            int sectorStartHundredthDegree,
+            int sectorEndHundredthDegree) {
         int zoomBinCount = endZoomBin - firstZoomBin;
         short[] counts = new short[zoomBinCount * WaterfallAggregator.AMPLITUDE_BIN_COUNT];
-        for (int packedSample : row.zoomSamples()) {
-            int zoomBin = packedSample / WaterfallAggregator.AMPLITUDE_BIN_COUNT;
+        for (long packedSample : row.zoomSamples()) {
+            int zoomBin = (int) (packedSample >>> 22);
             if (zoomBin < firstZoomBin || zoomBin >= endZoomBin) continue;
-            int amplitudeBin = packedSample % WaterfallAggregator.AMPLITUDE_BIN_COUNT;
+            int angle = (int) (packedSample & 0xffffL);
+            if (sectorEnabled && !isInSector(angle, sectorStartHundredthDegree, sectorEndHundredthDegree)) continue;
+            int amplitudeBin = (int) ((packedSample >>> 16) & 0x3fL);
             int index = amplitudeBin * zoomBinCount + zoomBin - firstZoomBin;
             int current = Short.toUnsignedInt(counts[index]);
             if (current < 0xffff) counts[index] = (short) (current + 1);
         }
         return counts;
+    }
+
+    private short[] sectorCounts(WaterfallRow row, int sectorStartHundredthDegree, int sectorEndHundredthDegree) {
+        short[] counts = new short[WaterfallAggregator.AMPLITUDE_BIN_COUNT * WaterfallAggregator.FREQUENCY_BIN_COUNT];
+        for (long packedSample : row.zoomSamples()) {
+            int angle = (int) (packedSample & 0xffffL);
+            if (!isInSector(angle, sectorStartHundredthDegree, sectorEndHundredthDegree)) continue;
+            int zoomBin = (int) (packedSample >>> 22);
+            int frequencyBin = zoomBin * WaterfallAggregator.FREQUENCY_BIN_COUNT
+                    / WaterfallAggregator.ZOOM_FREQUENCY_BIN_COUNT;
+            int amplitudeBin = (int) ((packedSample >>> 16) & 0x3fL);
+            int index = amplitudeBin * WaterfallAggregator.FREQUENCY_BIN_COUNT + frequencyBin;
+            int current = Short.toUnsignedInt(counts[index]);
+            if (current < 0xffff) counts[index] = (short) (current + 1);
+        }
+        return counts;
+    }
+
+    private boolean isInSector(int angle, int start, int end) {
+        if (start <= end) return angle >= start && angle < end;
+        return angle >= start || angle < end;
     }
 }
