@@ -28,6 +28,11 @@ jobs:
       - name: Validate Compose files
         run: |
           docker compose -f deployment/docker-compose.yml config --quiet
-          BACKEND_IMAGE=ghcr.io/mephisto-nox/radar-pulse-vis/backend:test FRONTEND_IMAGE=ghcr.io/mephisto-nox/radar-pulse-vis/frontend:test docker compose -f deployment/docker-compose.prod.yml config --quiet
+          BACKEND_IMAGE=ghcr.io/mephisto-nox/radar-pulse-vis/backend:test \
+          FRONTEND_IMAGE=ghcr.io/mephisto-nox/radar-pulse-vis/frontend:test \
+          KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
+          KAFKA_REPLICATION_FACTOR=1 \
+          RECEIVER_ID=RX-01 \
+            docker compose -f deployment/docker-compose.prod.yml config --quiet
       - name: Validate Kubernetes manifests
         run: go run github.com/yannh/kubeconform/cmd/kubeconform@v0.6.7 -strict -summary deployment/kubernetes/*.yaml
