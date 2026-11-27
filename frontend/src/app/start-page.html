@@ -1,0 +1,16 @@
+<section class="start-screen">
+  <div class="welcome-copy">
+    <p class="eyebrow">RADAR SIGNAL MONITORING</p>
+    <h1>{{ i18n.t('welcome') }}</h1>
+    <p>{{ i18n.t('welcomeIntro') }}</p>
+    <div class="start-actions">
+      <a class="primary-action" routerLink="/waterfall">{{ i18n.t('openDashboard') }} <span aria-hidden="true">→</span></a>
+      <a class="secondary-action" routerLink="/aoa">{{ i18n.t('aoaPage') }} <span aria-hidden="true">→</span></a>
+    </div>
+  </div>
+  <div class="status-overview">
+    <div class="status-title"><span class="pulse-icon" aria-hidden="true">⌁</span><div><h2>{{ i18n.t('pipelineStatus') }}</h2><p>{{ i18n.t('noDataYet') }}</p></div></div>
+    <div class="status-row"><span class="status-indicator" [class.up]="stream.udpStatus() === 'UP'"></span><span>{{ i18n.t('udpReceiver') }}</span><strong>{{ stream.udpStatus() }}</strong></div>
+    <div class="status-row"><span class="status-indicator" [class.up]="stream.kafkaStatus() === 'UP'"></span><span>{{ i18n.t('kafkaFlow') }}</span><strong>{{ stream.kafkaStatus() }}</strong></div>
+  </div>
+</section>

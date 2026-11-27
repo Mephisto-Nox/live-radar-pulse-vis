@@ -1,0 +1,103 @@
+<header class="screen-heading">
+  <div>
+    <p class="eyebrow">{{ i18n.t('mainScreen') }}</p>
+    <h1>{{ i18n.t('dashboardTitle') }}</h1>
+    <p class="subtitle">{{ i18n.t('dashboardSubtitle') }}</p>
+  </div>
+  <div class="screen-status" [class.active]="stream.status() === 'connected'" [class.warning]="isStale() || stream.status() === 'error'">
+    <span class="status-light" aria-hidden="true"></span>
+    <span>{{ isPaused() ? i18n.t('paused') : statusText() }}</span>
+  </div>
+</header>
+
+<section class="control-panel" [attr.aria-label]="i18n.t('dashboardTitle')">
+  <div class="control-group receiver-control">
+    <label for="receiver-select">{{ i18n.t('receiver') }}</label>
+    <select id="receiver-select" [value]="stream.selectedReceiver()" (change)="setReceiver($any($event.target).value)">
+      @for (receiver of stream.receivers(); track receiver) {
+        <option [value]="receiver">{{ receiver }}</option>
+      }
+    </select>
+  </div>
+  <div class="control-group time-control">
+    <span class="control-label">{{ i18n.t('timeWindow') }}</span>
+    <div class="segmented-control" role="group" [attr.aria-label]="i18n.t('timeWindow')">
+      @for (seconds of [5, 10, 30]; track seconds) {
+        <button type="button" [class.selected]="stream.timeWindowSeconds() === seconds" [attr.aria-pressed]="stream.timeWindowSeconds() === seconds" (click)="setTimeWindow(seconds)">{{ seconds }} s</button>
+      }
+    </div>
+  </div>
+  <div class="control-group frequency-control">
+    <span class="control-label">{{ i18n.t('frequencyBand') }}</span>
+    <div class="frequency-inputs">
+      <label><span>{{ i18n.t('frequencyStart') }}</span><input type="number" min="0" max="59.9" step="0.1" [value]="frequencyFromGHz()" (change)="setFrequencyFrom($any($event.target).value)" /></label>
+      <span class="range-divider" aria-hidden="true">–</span>
+      <label><span>{{ i18n.t('frequencyEnd') }}</span><input type="number" min="0.1" max="60" step="0.1" [value]="frequencyToGHz()" (change)="setFrequencyTo($any($event.target).value)" /></label>
+      @if (selectedRange()) {
+        <button class="clear-range" type="button" [attr.aria-label]="i18n.t('resetZoom')" (click)="useFullFrequencyRange()">{{ i18n.t('resetZoom') }} · {{ selectedRange() }}</button>
+      }
+    </div>
+  </div>
+  <div class="control-group amplitude-control">
+    <label for="amplitude-threshold">{{ i18n.t('amplitudeThreshold') }} <strong>{{ amplitudeThresholdDbm() }} {{ i18n.t('thresholdDbm') }}</strong></label>
+    <input id="amplitude-threshold" type="range" min="-80" max="-40" step="1" [value]="amplitudeThresholdDbm()" (input)="setAmplitude($any($event.target).value)" />
+    <div class="range-labels"><span>−80 dBm</span><span>−40 dBm</span></div>
+  </div>
+  <button class="pause-button" type="button" [class.paused]="isPaused()" [attr.aria-pressed]="isPaused()" (click)="togglePause()">
+    <span aria-hidden="true">{{ isPaused() ? '▶' : 'Ⅱ' }}</span>{{ isPaused() ? i18n.t('resume') : i18n.t('pause') }}
+  </button>
+</section>
+
+@if (isStale()) {
+  <div class="notice warning-notice" role="status"><span aria-hidden="true">!</span>{{ i18n.t('staleWarning') }}</div>
+}
+@if (hasGap()) {
+  <div class="notice gap-notice" role="status"><span aria-hidden="true">▧</span>{{ i18n.t('gapWarning') }}</div>
+}
+
+<main class="waterfall-page">
+  <section class="waterfall-panel" aria-labelledby="waterfall-heading">
+    <header class="panel-heading">
+      <div class="panel-title"><span class="panel-mark waterfall-mark" aria-hidden="true">▥</span><div><h2 id="waterfall-heading">{{ i18n.t('dashboardTitle') }}</h2><p>{{ stream.selectedReceiver() }}</p></div></div>
+      <div class="panel-metrics">
+        <span class="metric"><small>{{ i18n.t('reduction') }}</small><strong>{{ reductionPercent() | number:'1.0-0' }}%</strong></span>
+        <span class="metric" [class.latency-warning]="(latencyMs() ?? 0) > 2_000"><small>{{ i18n.t('latency') }}</small><strong>{{ latencyMs() === null ? '—' : (latencyMs() | number:'1.0-0') + ' ms' }}</strong></span>
+      </div>
+    </header>
+    <div class="waterfall-layout">
+      <div class="time-axis" aria-hidden="true">
+        <span>{{ i18n.t('now') }}</span><span>−{{ stream.timeWindowSeconds() / 4 }} s</span><span>−{{ stream.timeWindowSeconds() / 2 }} s</span><span>−{{ stream.timeWindowSeconds() * 3 / 4 }} s</span><span>−{{ stream.timeWindowSeconds() }} s</span>
+      </div>
+      <div class="plot-wrap">
+        <canvas #waterfallCanvas class="waterfall-canvas" (pointermove)="onPointerMove($event)" (pointerleave)="onPointerLeave()" (pointerdown)="onPointerDown($event)" (pointerup)="onPointerUp($event)" [attr.aria-label]="i18n.t('dashboardTitle') + ', ' + i18n.t('frequency') + ' über Zeit'" role="img"></canvas>
+        @if (pointerStartX() !== null && selectionWidth() > 0) {
+          <span class="zoom-selection" [style.left.%]="selectionLeft()" [style.width.%]="selectionWidth()" aria-hidden="true"></span>
+        }
+        @if (visibleRows().length === 0) {
+          <div class="empty-plot" role="status">
+            <strong>{{ i18n.t('noWaterfallData') }}</strong>
+            <span>{{ pipelineHint() }}</span>
+            <small>{{ i18n.t('udpKafkaStatus', { udp: stream.udpStatus(), kafka: stream.kafkaStatus(), websocket: statusText() }) }}</small>
+            <small>{{ i18n.t('pipelineCounters', {
+              received: stream.pipelineMetrics().receivedDatagrams,
+              decoded: stream.pipelineMetrics().decodedPdws,
+              published: stream.pipelineMetrics().publishedBatches,
+              consumed: stream.pipelineMetrics().consumedBatches
+            }) }}</small>
+          </div>
+        }
+        <span class="now-marker">{{ i18n.t('now') }}</span>
+      </div>
+    </div>
+    <div class="frequency-axis">
+      @for (tick of [0, 0.25, 0.5, 0.75, 1]; track tick) {
+        <span>{{ (frequencyFromGHz() + (frequencyToGHz() - frequencyFromGHz()) * tick) | number:'1.0-1' }} GHz</span>
+      }
+    </div>
+    <footer class="plot-footer">
+      <div class="density-legend"><span>{{ i18n.t('densityLegend') }}</span><div class="legend-gradient" aria-hidden="true"></div><small>0</small><small>log</small><small>max</small></div>
+      <output class="cursor-readout" aria-live="polite">{{ cursorReadout() || (i18n.t('frequency') + ': ' + frequencyFromGHz().toFixed(1) + '–' + frequencyToGHz().toFixed(1) + ' GHz') }}</output>
+    </footer>
+  </section>
+
+</main>

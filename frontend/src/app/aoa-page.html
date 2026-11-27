@@ -1,0 +1,57 @@
+<header class="screen-heading">
+  <div>
+    <p class="eyebrow">{{ i18n.t('mainScreen') }}</p>
+    <h1>{{ i18n.t('aoaTitle') }}</h1>
+    <p class="subtitle">{{ i18n.t('aoaSubtitle') }}</p>
+  </div>
+  <div class="screen-status" [class.active]="stream.status() === 'connected'" [class.warning]="stream.status() === 'error'">
+    <span class="status-light" aria-hidden="true"></span>{{ statusText() }}
+  </div>
+</header>
+
+<section class="control-panel aoa-page-controls" [attr.aria-label]="i18n.t('aoaControls')">
+  <label class="control-group">
+    <span class="control-label">{{ i18n.t('timeWindow') }}</span>
+    <select [value]="timeWindowSeconds()" (change)="setTimeWindow($any($event.target).value)">
+      <option value="5">5 s</option><option value="10">10 s</option><option value="30">30 s</option>
+    </select>
+  </label>
+  <div class="control-group">
+    <span class="control-label">{{ i18n.t('frequencyBand') }}</span>
+    <div class="frequency-inputs">
+      <label><span>{{ i18n.t('frequencyStart') }}</span><input type="number" min="0" max="59.9" step="0.1" [value]="frequencyFromGHz()" (change)="setFrequencyFrom($any($event.target).value)" /></label>
+      <span class="range-divider" aria-hidden="true">–</span>
+      <label><span>{{ i18n.t('frequencyEnd') }}</span><input type="number" min="0.1" max="60" step="0.1" [value]="frequencyToGHz()" (change)="setFrequencyTo($any($event.target).value)" /></label>
+    </div>
+  </div>
+  <label class="control-group amplitude-control">
+    <span class="control-label">{{ i18n.t('amplitudeThreshold') }} <strong>{{ amplitudeThresholdDbm() }} {{ i18n.t('thresholdDbm') }}</strong></span>
+    <input type="range" min="-80" max="-40" step="1" [value]="amplitudeThresholdDbm()" (input)="setAmplitude($any($event.target).value)" />
+    <span class="range-labels"><span>−80 dBm</span><span>−40 dBm</span></span>
+  </label>
+  <button class="pause-button" type="button" [class.paused]="isPaused()" [attr.aria-pressed]="isPaused()" (click)="isPaused.set(!isPaused())">
+    {{ isPaused() ? i18n.t('resume') : i18n.t('pause') }}
+  </button>
+</section>
+
+<div class="aoa-diagnostics" role="status">
+  <strong>{{ dataHint() }}</strong>
+  <span>{{ i18n.t('aoaDiagnostic', {
+    websocket: statusText(),
+    receivers: stream.receivers().length,
+    tiles: stream.tiles().length,
+    datagrams: pipeline.pipelineMetrics().receivedDatagrams
+  }) }}</span>
+</div>
+
+<section class="aoa-page-display">
+  <app-aoa-display
+    [receiverId]="receiverId()"
+    [timeWindowSeconds]="timeWindowSeconds()"
+    [frequencyFromGHz]="frequencyFromGHz()"
+    [frequencyToGHz]="frequencyToGHz()"
+    [amplitudeThresholdDbm]="amplitudeThresholdDbm()"
+    [isPaused]="isPaused()"
+    (receiverChanged)="setReceiver($event)"
+    (sectorChanged)="setSector($event)" />
+</section>

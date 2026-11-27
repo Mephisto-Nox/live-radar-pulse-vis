@@ -1,4 +1,4 @@
-docs/internal/*
+.docs/*
 
 # Java / Maven
 **/target/
@@ -17,3 +17,4 @@ frontend/.angular/
 *.iml
 .DS_Store
 Thumbs.db
+hs_err_pid13932.log

@@ -1,0 +1,84 @@
+<section class="aoa-panel" aria-labelledby="aoa-heading">
+  <header class="panel-heading">
+    <div class="panel-title">
+      <span class="panel-mark aoa-mark" aria-hidden="true">◎</span>
+      <div>
+        <h2 id="aoa-heading">{{ i18n.t('aoaTitle') }}</h2>
+        <p>{{ i18n.t('aoaSubtitle') }}</p>
+      </div>
+    </div>
+    <div class="aoa-status" [class.active]="stream.status() === 'connected'" [class.warning]="isStale() || stream.status() === 'error'">
+      <span class="status-light" aria-hidden="true"></span>{{ isPaused() ? i18n.t('paused') : statusText() }}
+    </div>
+  </header>
+
+  <div class="aoa-controls" [attr.aria-label]="i18n.t('aoaControls')">
+    <label class="receiver-picker">
+      <span>{{ i18n.t('receiver') }}</span>
+      <select multiple size="2" (change)="setSelectedReceivers($event)" [attr.aria-label]="i18n.t('aoaReceiversHint')">
+        @for (receiver of stream.receivers(); track receiver) {
+          <option [value]="receiver" [selected]="activeReceiverIds().includes(receiver)">{{ receiver }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>{{ i18n.t('radiusMode') }}</span>
+      <select [value]="radiusMode()" (change)="setRadiusMode($any($event.target).value)">
+        <option value="amplitude">{{ i18n.t('amplitude') }}</option>
+        <option value="frequency">{{ i18n.t('frequency') }}</option>
+        <option value="age">{{ i18n.t('pulseAge') }}</option>
+      </select>
+    </label>
+    @if (radiusMode() === 'amplitude') {
+      <fieldset class="amplitude-range">
+        <legend>{{ i18n.t('displayedAmplitude') }}</legend>
+        <label><span>{{ i18n.t('minimum') }}</span><input type="number" min="-200" max="99" step="1" [value]="minAmplitudeDbm()" (change)="setMinAmplitude($any($event.target).value)" /></label>
+        <label><span>{{ i18n.t('maximum') }}</span><input type="number" min="-199" max="100" step="1" [value]="maxAmplitudeDbm()" (change)="setMaxAmplitude($any($event.target).value)" /></label>
+        <span>dBm</span>
+      </fieldset>
+    }
+    <div class="reference-note"><strong>0°</strong><span>{{ i18n.t('northReference') }}</span></div>
+    @if (selectedSector()) {
+      <button type="button" class="sector-clear" (click)="clearSector()">{{ i18n.t('clearSector') }}</button>
+    }
+  </div>
+
+  @if (isStale()) {
+    <div class="aoa-notice" role="status">{{ i18n.t('staleWarning') }}</div>
+  }
+  @if (hasGap()) {
+    <div class="aoa-notice gap" role="status">{{ i18n.t('gapWarning') }}</div>
+  }
+
+  <div class="polar-wrap" [class.empty]="visibleTiles().length === 0">
+    <canvas #aoaCanvas class="polar-canvas"
+      (pointerdown)="onPointerDown($event)"
+      (pointerup)="onPointerUp($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerleave)="onPointerLeave()"
+      [attr.aria-label]="i18n.t('aoaTitle') + ', 0° ' + i18n.t('northReference')"
+      role="img"></canvas>
+    @if (visibleTiles().length === 0) {
+      <div class="polar-empty" role="status">
+        <span aria-hidden="true">◎</span>
+        <strong>{{ i18n.t('aoaWaiting') }}</strong>
+        <small>{{ statusText() }}</small>
+      </div>
+    }
+  </div>
+
+  <footer class="aoa-footer">
+    @if (activeReceiverIds().length > 1) {
+      <div class="receiver-legend">
+        @for (receiver of activeReceiverIds(); track receiver) {
+          <span><i [style.background-color]="receiverColor(receiver)" aria-hidden="true"></i>{{ receiver }}</span>
+        }
+      </div>
+    } @else {
+      <span>{{ i18n.t('unassignedPulses') }}</span>
+    }
+    <span>{{ radiusMode() === 'amplitude' ? 'dBm' : radiusMode() === 'frequency' ? 'GHz' : 's' }}</span>
+    <span>{{ i18n.t('timeWindow') }} · {{ timeWindowSeconds() }} s</span>
+    <output aria-live="polite">{{ cursorReadout() || i18n.t('dragSectorHint') }}</output>
+  </footer>
+</section>
